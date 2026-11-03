@@ -305,4 +305,103 @@ el('readPhoto').onclick=async()=>{
 // Manual corrections in the OCR text update suggestions; edits in the separate fields remain editable.
 el('photoText').addEventListener('input',()=>{if(el('photoText').value.trim())dp35Fill(el('photoText').value)});
 
+
+// DailyPop 3.6: improve OCR image quality without touching scanner or saved data.
+// iPhone photos can be very large; OCR benefits from a normalized, sharp, upright canvas.
+async function dp36PrepareImage(file){
+ const bmp=await createImageBitmap(file);
+ try{
+  const longest=Math.max(bmp.width,bmp.height);
+  const scale=Math.min(2.2,Math.max(1,2100/longest));
+  const w=Math.round(bmp.width*scale),h=Math.round(bmp.height*scale);
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);
+  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  ctx.drawImage(bmp,0,0,w,h);
+  const pixels=ctx.getImageData(0,0,w,h),d=pixels.data;
+  // Contrast enhancement and grayscale for dark/light package labels.
+  for(let i=0;i<d.length;i+=4){
+   const gray=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+   const v=Math.max(0,Math.min(255,(gray-128)*1.65+142));
+   d[i]=d[i+1]=d[i+2]=v;
+  }
+  ctx.putImageData(pixels,0,0);
+  return canvas;
+ }finally{bmp.close()}
+}
+function dp36Quality(raw){
+ const t=String(raw||'').toLowerCase();
+ let score=0;
+ for(const re of [/magnesi/,/bisglyc|bisglyz|glycinat/,/pro\s?natural/,/omega/,/vitamin/,/kreatin|creatin/,/capsul|kapsel/,/verzehr|empfehl|dosier|täglich/,/element|docmorris|esn/])if(re.test(t))score+=8;
+ score+=Math.min(20,(t.match(/[a-zäöü]{4,}/g)||[]).length);
+ return score;
+}
+function dp36BetterName(raw){
+ const text=String(raw||'');
+ const data=dp35Suggestions(text);
+ // English packaging may say BISGLYCINATE rather than BISGLYCINAT.
+ const magnesium=/magnesi|magneslum|magneslum|magnesium|magnesum/i.test(text);
+ const bisgly=/bis\s?glyc|bis\s?glyz|bis\s?glysin|bis\s?glycin/i.test(text);
+ if(magnesium&&bisgly){
+  data.ingredient='Magnesium Bisglycinat';
+  data.name=[data.brand,data.ingredient].filter(Boolean).join(' ');
+ }
+ return data;
+}
+function dp36Fill(raw){
+ const data=dp36BetterName(raw);
+ el('photoName').value=data.name||'';
+ el('photoBrand').value=data.brand||'';
+ el('photoRecommendation').value=data.recommendation||'';
+ el('photoOwnDose').value='';
+ el('photoFields').hidden=false;
+ el('photoStatus').textContent=(data.name?'Produktname als Vorschlag erkannt. ':'Produktname nicht eindeutig erkannt. ')+(data.recommendation?'Verzehrempfehlung als Vorschlag erkannt. ':'Keine eindeutige Verzehrempfehlung gefunden. ')+'Bitte Angaben auf der Verpackung prüfen.';
+ dp34PhotoMatches(data.name,data.brand);
+}
+el('readPhoto').onclick=async()=>{
+ const front=photoInput.files?.[0],back=dp35Back.files?.[0];
+ if(!front&&!back){el('photoStatus').textContent='Bitte zuerst ein Verpackungsfoto auswählen.';return}
+ const btn=el('readPhoto');btn.disabled=true;
+ el('photoStatus').textContent='Foto wird für die Texterkennung vorbereitet …';
+ let worker;
+ try{
+  await loadOCR();
+  worker=await Tesseract.createWorker('deu+eng',1,{logger:m=>{
+   if(m.status==='recognizing text')el('photoStatus').textContent='Texterkennung: '+Math.round((m.progress||0)*100)+' %';
+  }});
+  const parts=[];
+  for(const [label,file] of [['Vorderseite',front],['Rückseite',back]]){
+   if(!file)continue;
+   el('photoStatus').textContent=label+' wird ausgewertet …';
+   let best='';
+   // Read the actual image first; retry a high-contrast version when results are poor.
+   try{const r=await worker.recognize(file);best=r.data?.text||''}catch(e){}
+   if(dp36Quality(best)<28){
+    try{
+     const prepared=await dp36PrepareImage(file);
+     const r=await worker.recognize(prepared);
+     const alternative=r.data?.text||'';
+     if(dp36Quality(alternative)>dp36Quality(best))best=alternative;
+    }catch(e){/* preserve original OCR result if image conversion unsupported */}
+   }
+   parts.push('--- '+label+' ---\n'+best);
+  }
+  const raw=parts.join('\n').trim();
+  el('photoText').value=raw;
+  dp36Fill(raw);
+  if(!raw||dp36Quality(raw)<8)el('photoStatus').textContent='Der Text konnte nicht zuverlässig gelesen werden. Bitte Foto bei hellem, gleichmäßigem Licht und mit gut lesbarer Beschriftung aufnehmen.';
+ }catch(e){
+  el('photoFields').hidden=false;
+  el('photoStatus').textContent='Texterkennung nicht verfügbar. Bitte Internetverbindung prüfen und erneut versuchen.';
+ }finally{
+  if(worker)try{await worker.terminate()}catch(e){}
+  btn.disabled=false;
+ }
+};
+el('photoText').addEventListener('input',()=>{if(el('photoText').value.trim())dp36Fill(el('photoText').value)});
+// Show correct version in page title and footer, keeping existing functionality.
+document.title='DailyPop 3.6 – Meine Supplements';
+const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textContent=dp36Footer.textContent.replace('3.5','3.6');
+
 </script></body></html>

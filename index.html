@@ -518,7 +518,7 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
  $('dp37-login').onclick=async()=>{const btn=$('dp37-login');btn.disabled=true;try{const c=await getClient();const email=$('dp37-email').value.trim(),password=$('dp37-password').value;if(!email||!password)throw Error('Bitte E-Mail und Passwort eingeben.');const {data,error}=await c.auth.signInWithPassword({email,password});if(error)throw error;status('dp37-auth-status','✓ Angemeldet: '+(data.user?.email||email),'ok');$('dp37-password').value=''}catch(e){status('dp37-auth-status','Anmeldung fehlgeschlagen: '+e.message,'error')}finally{btn.disabled=false}};
  $('dp37-logout').onclick=async()=>{try{const c=await getClient();const {error}=await c.auth.signOut();if(error)throw error;status('dp37-auth-status','Abgemeldet.','ok')}catch(e){status('dp37-auth-status',e.message,'error')}};
  const prior=document.querySelector('[data-tab="account"]');prior?.addEventListener('click',async()=>{try{const c=await getClient();const {data}=await c.auth.getUser();if(data?.user)status('dp37-auth-status','✓ Angemeldet: '+data.user.email,'ok')}catch{}});
- document.title='DailyPop 3.9 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent='DailyPop 3.9 · Privat auf deinem Gerät';
+ document.title='DailyPop 3.9.1 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent='DailyPop 3.9.1 · Privat auf deinem Gerät';
 })();
 
 // DailyPop 3.9: read-only Google Calendar connection for shift-aware suggested times.
@@ -532,6 +532,7 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
  let settings={};try{settings=JSON.parse(localStorage.getItem(K))||{}}catch{}
  let cache={};try{cache=JSON.parse(localStorage.getItem(D))||{}}catch{}
  let token=null,tokenClient=null;
+ let connectionPending=false;
  const status=(t,bad=false)=>{$('dp39-status').textContent=t;$('dp39-status').className='dp37-status '+(bad?'error':'ok')};
  $('dp39-client').value=settings.client||'';
  for(const [kind,id,def] of [['Früh','early','früh,frueh,early'],['Spät','late','spät,spaet,late'],['Nacht','night','nacht,night'],['Frei','free','frei,urlaub,off']])$(('dp39-'+id+'-key')).value=settings.keys?.[kind]||def;
@@ -553,21 +554,46 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
   persist();
  }
  $('dp39-save').onclick=()=>{try{saveSettings();renderToday();status('✓ Schichtzeiten gespeichert.')}catch(e){status(e.message,true)}};
- function loadGIS(){if(window.google?.accounts?.oauth2)return Promise.resolve();return new Promise((resolve,reject)=>{let sc=document.createElement('script');sc.src='https://accounts.google.com/gsi/client';sc.onload=()=>resolve();sc.onerror=()=>reject(Error('Google-Anmeldung konnte nicht geladen werden.'));document.head.append(sc)})}
+ function loadGIS(){
+  if(window.google?.accounts?.oauth2)return Promise.resolve();
+  if(window.dp39GISPromise)return window.dp39GISPromise;
+  window.dp39GISPromise=new Promise((resolve,reject)=>{
+   const sc=document.createElement('script');sc.src='https://accounts.google.com/gsi/client';sc.async=true;
+   sc.onload=()=>window.google?.accounts?.oauth2?resolve():reject(Error('Google-Anmeldebibliothek wurde nicht vollständig geladen.'));
+   sc.onerror=()=>reject(Error('Google-Anmeldung konnte nicht geladen werden.'));
+   document.head.append(sc);
+  }).catch(e=>{window.dp39GISPromise=null;throw e});
+  return window.dp39GISPromise;
+ }
  async function connect(){
   const client=getConfig();settings.client=client;persist();
+  status('Google-Anmeldung wird vorbereitet …');
   await loadGIS();
-  tokenClient=google.accounts.oauth2.initTokenClient({client_id:client,scope:'https://www.googleapis.com/auth/calendar.readonly',callback:async result=>{
-   if(result.error){status('Google-Anmeldung: '+result.error,true);return}
-   token=result.access_token;status('✓ Google verbunden. Kalender werden geladen …');
-   try{await loadCalendars();await refresh()}catch(e){status(e.message,true)}
-  }});
-  tokenClient.requestAccessToken({prompt:'consent'});
+  if(connectionPending){status('Google-Anmeldung läuft bereits. Bitte das Google-Fenster abschließen.');return}
+  connectionPending=true;
+  const button=$('dp39-connect');button.disabled=true;
+  const finish=()=>{connectionPending=false;button.disabled=false};
+  tokenClient=google.accounts.oauth2.initTokenClient({
+   client_id:client,scope:'https://www.googleapis.com/auth/calendar.readonly',
+   error_callback:error=>{finish();status('Google-Anmeldefenster: '+(error?.type||'abgebrochen oder blockiert')+'. Bitte Pop-ups für diese Seite erlauben.',true)},
+   callback:async result=>{
+    finish();
+    if(result.error||!result.access_token){status('Google-Anmeldung fehlgeschlagen: '+(result.error_description||result.error||'Kein Zugriffstoken erhalten'),true);return}
+    token=result.access_token;
+    status('✓ Google-Zugriff erteilt. Kalenderliste wird geladen …');
+    try{
+     await loadCalendars();
+     status('✓ Google verbunden. Bitte den Schichtkalender prüfen und dann „Schichten aktualisieren“ wählen.');
+    }catch(e){status('Kalenderliste konnte nicht geladen werden: '+e.message,true)}
+   }
+  });
+  status('Bitte die Google-Freigabe im geöffneten Fenster bestätigen …');
+  try{tokenClient.requestAccessToken({prompt:'consent'})}catch(e){finish();throw e}
  }
  async function api(path){
   if(!token)throw Error('Bitte zuerst „Mit Google verbinden“ auswählen.');
   const r=await fetch('https://www.googleapis.com/calendar/v3/'+path,{headers:{Authorization:'Bearer '+token}});
-  if(!r.ok){if(r.status===401){token=null;throw Error('Google-Anmeldung abgelaufen. Bitte erneut verbinden.')}throw Error('Google Kalender: HTTP '+r.status)}
+  if(!r.ok){if(r.status===401){token=null;throw Error('Google-Anmeldung abgelaufen. Bitte erneut verbinden.')}let detail='';try{const body=await r.json();detail=body?.error?.message||''}catch{}throw Error('Google Kalender: HTTP '+r.status+(detail?' – '+detail:''))}
   return r.json();
  }
  async function loadCalendars(){
@@ -577,6 +603,7 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
   calendars.forEach(c=>{let o=document.createElement('option');o.value=c.id;o.textContent=c.summary;sel.append(o)});
   let preferred=calendars.find(c=>c.id===settings.calendar)||calendars.find(c=>/dailypop schichten/i.test(c.summary));
   if(preferred)sel.value=preferred.id;
+  if(sel.value){settings.calendar=sel.value;persist()}
   if(!calendars.length)throw Error('Keine Google-Kalender gefunden.');
  }
  function classify(summary){
@@ -631,7 +658,7 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
   const note=document.createElement('p');note.textContent='Dies sind Schicht-Vorschläge; deine normalen Zeiten werden nicht überschrieben.';box.append(note);
  }
  $('dp39-connect').onclick=async()=>{try{await connect()}catch(e){status(e.message,true)}};
- $('dp39-disconnect').onclick=()=>{if(token&&window.google?.accounts?.oauth2)google.accounts.oauth2.revoke(token,()=>{});token=null;status('Google getrennt. Lokal gespeicherte Schichtdaten bleiben erhalten.')};
+ $('dp39-disconnect').onclick=()=>{if(token&&window.google?.accounts?.oauth2)google.accounts.oauth2.revoke(token,()=>{});token=null;const sel=$('dp39-calendar');sel.replaceChildren(new Option('Bitte zuerst Google verbinden',''));status('Google getrennt. Lokal gespeicherte Schichtdaten bleiben erhalten.')};
  $('dp39-refresh').onclick=async()=>{try{await refresh()}catch(e){status(e.message,true)}};
  $('dp39-calendar').addEventListener('change',()=>{settings.calendar=$('dp39-calendar').value;persist()});
  document.querySelector('[data-tab="account"]').addEventListener('click',()=>{renderToday()});

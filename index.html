@@ -531,7 +531,7 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
  $('dp37-login').onclick=async()=>{const btn=$('dp37-login');btn.disabled=true;try{const c=await getClient();const email=$('dp37-email').value.trim(),password=$('dp37-password').value;if(!email||!password)throw Error('Bitte E-Mail und Passwort eingeben.');const {data,error}=await c.auth.signInWithPassword({email,password});if(error)throw error;status('dp37-auth-status','✓ Angemeldet: '+(data.user?.email||email),'ok');$('dp37-password').value=''}catch(e){status('dp37-auth-status','Anmeldung fehlgeschlagen: '+e.message,'error')}finally{btn.disabled=false}};
  $('dp37-logout').onclick=async()=>{try{const c=await getClient();const {error}=await c.auth.signOut();if(error)throw error;status('dp37-auth-status','Abgemeldet.','ok')}catch(e){status('dp37-auth-status',e.message,'error')}};
  const prior=document.querySelector('[data-tab="account"]');prior?.addEventListener('click',async()=>{try{const c=await getClient();const {data}=await c.auth.getUser();if(data?.user)status('dp37-auth-status','✓ Angemeldet: '+data.user.email,'ok')}catch{}});
- document.title='DailyPop 3.9.7 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent='DailyPop 3.9.7 · Privat auf deinem Gerät';
+ document.title='DailyPop 3.9.9 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent='DailyPop 3.9.9 · Privat auf deinem Gerät';
 })();
 
 // DailyPop 3.9: read-only Google Calendar connection for shift-aware suggested times.

@@ -437,8 +437,8 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
   if(!isRecovery)return;
   const access=get('access_token'),refresh=get('refresh_token'),code=get('code'),tokenHash=get('token_hash');
   // Remove sensitive recovery parameters from browser history immediately.
-  history.replaceState(null,'',location.pathname);
-  sessionStorage.setItem('dailypop_recovery_open_v382','1');
+  window.history.replaceState(null,'',location.pathname);
+  sessionStorage.setItem('dailypop_recovery_open_v383','1');
   const box=$('dp38-recovery-box');box.hidden=false;
   document.querySelector('[data-tab="account"]')?.click();
   if(recoveryError){
@@ -459,7 +459,7 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
     if(error)throw error;
    }else throw Error('Der Link enthält keine vollständigen Anmeldedaten.');
    recoverySessionReady=true;
-   sessionStorage.setItem('dailypop_recovery_open_v382','1');
+   sessionStorage.setItem('dailypop_recovery_open_v383','1');
    status('dp38-recovery-status','✓ Link bestätigt. Du kannst jetzt ein neues Passwort festlegen.','ok');
   }catch(e){status('dp38-recovery-status','Der Link konnte nicht bestätigt werden: '+e.message+'. Prüfe deine Supabase-Verbindung und fordere bei Bedarf einen neuen Link an.','error')}
  }
@@ -472,7 +472,7 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
   try{
    const c=await getClient();const {error}=await c.auth.updateUser({password:pw});if(error)throw error;
    $('dp38-new-password').value='';$('dp38-confirm-password').value='';
-   recoverySessionReady=false;sessionStorage.removeItem('dailypop_recovery_open_v382');status('dp38-recovery-status','✓ Passwort gespeichert! Du kannst dich jetzt im Bereich „Anmelden“ mit deinem neuen Passwort anmelden.','ok');
+   recoverySessionReady=false;sessionStorage.removeItem('dailypop_recovery_open_v383');status('dp38-recovery-status','✓ Passwort gespeichert! Du kannst dich jetzt im Bereich „Anmelden“ mit deinem neuen Passwort anmelden.','ok');
    await c.auth.signOut(); 
   }catch(e){status('dp38-recovery-status','Speichern fehlgeschlagen: '+e.message,'error')}
   finally{btn.disabled=false}
@@ -490,13 +490,13 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
  };
  initRecovery();
  window.addEventListener('hashchange',()=>{if(location.hash.includes('access_token=')||location.hash.includes('error=')||location.hash.includes('token_hash='))initRecovery()});
- if(sessionStorage.getItem('dailypop_recovery_open_v382')==='1'&&!location.hash.includes('access_token=')){
-  (async()=>{try{const c=await getClient();const {data}=await c.auth.getUser();if(data?.user){recoverySessionReady=true;$('dp38-recovery-box').hidden=false;document.querySelector('[data-tab="account"]')?.click();status('dp38-recovery-status','✓ Passwort-Link erkannt. Du kannst jetzt dein Passwort festlegen.','ok')}else sessionStorage.removeItem('dailypop_recovery_open_v382')}catch(e){/* Config can be entered later */}})();
+ if(sessionStorage.getItem('dailypop_recovery_open_v383')==='1'&&!location.hash.includes('access_token=')){
+  (async()=>{try{const c=await getClient();const {data}=await c.auth.getUser();if(data?.user){recoverySessionReady=true;$('dp38-recovery-box').hidden=false;document.querySelector('[data-tab="account"]')?.click();status('dp38-recovery-status','✓ Passwort-Link erkannt. Du kannst jetzt dein Passwort festlegen.','ok')}else sessionStorage.removeItem('dailypop_recovery_open_v383')}catch(e){/* Config can be entered later */}})();
  }
  $('dp37-save-config').onclick=()=>{try{const c=validConfig();localStorage.setItem(configStorage,JSON.stringify(c));client=null;status('dp37-config-status','✓ Einstellungen auf diesem Gerät gespeichert.','ok')}catch(e){status('dp37-config-status',e.message,'error')}};
  $('dp37-login').onclick=async()=>{const btn=$('dp37-login');btn.disabled=true;try{const c=await getClient();const email=$('dp37-email').value.trim(),password=$('dp37-password').value;if(!email||!password)throw Error('Bitte E-Mail und Passwort eingeben.');const {data,error}=await c.auth.signInWithPassword({email,password});if(error)throw error;status('dp37-auth-status','✓ Angemeldet: '+(data.user?.email||email),'ok');$('dp37-password').value=''}catch(e){status('dp37-auth-status','Anmeldung fehlgeschlagen: '+e.message,'error')}finally{btn.disabled=false}};
  $('dp37-logout').onclick=async()=>{try{const c=await getClient();const {error}=await c.auth.signOut();if(error)throw error;status('dp37-auth-status','Abgemeldet.','ok')}catch(e){status('dp37-auth-status',e.message,'error')}};
  const prior=document.querySelector('[data-tab="account"]');prior?.addEventListener('click',async()=>{try{const c=await getClient();const {data}=await c.auth.getUser();if(data?.user)status('dp37-auth-status','✓ Angemeldet: '+data.user.email,'ok')}catch{}});
- document.title='DailyPop 3.8.2 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent=footer.textContent.replace('3.6','3.8.2');
+ document.title='DailyPop 3.8.3 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent=footer.textContent.replace('3.6','3.8.2');
 })();
 </script></body></html>

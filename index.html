@@ -13,7 +13,7 @@
 <p class="smallnote">Verbinde deinen privaten Google-Kalender „DailyPop Schichten“. DailyPop liest nur Kalendertermine, ändert keine Termine und speichert keinen Google-Zugangsschlüssel dauerhaft.</p>
 <label for="dp39-client">Google OAuth Client-ID</label><input id="dp39-client" placeholder="…apps.googleusercontent.com" autocomplete="off">
 <div class="dp37-actions"><button type="button" class="productbtn" id="dp39-connect">Mit Google verbinden</button><button type="button" class="productbtn secondary" id="dp39-disconnect">Trennen</button></div>
-<label for="dp39-calendar">Schichtkalender auswählen</label><select id="dp39-calendar"><option value="">Bitte zuerst Google verbinden</option></select>
+<button type="button" class="productbtn secondary" id="dp393-redirect" style="width:100%;margin-top:10px">Alternative Google-Anmeldung ohne Pop-up</button><p class="smallnote">Falls das Google-Fenster mit „popup_closed“ endet: Diese Anmeldung öffnet Google im selben Browser-Tab und kehrt danach zu DailyPop zurück.</p><label for="dp39-calendar">Schichtkalender auswählen</label><select id="dp39-calendar"><option value="">Bitte zuerst Google verbinden</option></select>
 <div class="dp37-actions"><button type="button" class="productbtn" id="dp39-refresh">Schichten aktualisieren</button></div>
 <p class="dp37-status" id="dp39-status" aria-live="polite">Noch nicht verbunden.</p>
 <p class="smallnote">Schichtzuordnung anhand des Termintextes: „Früh“, „Spät“, „Nacht“ und „Frei“. Bei abweichenden Namen kannst du die Begriffe anpassen.</p>
@@ -518,7 +518,7 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
  $('dp37-login').onclick=async()=>{const btn=$('dp37-login');btn.disabled=true;try{const c=await getClient();const email=$('dp37-email').value.trim(),password=$('dp37-password').value;if(!email||!password)throw Error('Bitte E-Mail und Passwort eingeben.');const {data,error}=await c.auth.signInWithPassword({email,password});if(error)throw error;status('dp37-auth-status','✓ Angemeldet: '+(data.user?.email||email),'ok');$('dp37-password').value=''}catch(e){status('dp37-auth-status','Anmeldung fehlgeschlagen: '+e.message,'error')}finally{btn.disabled=false}};
  $('dp37-logout').onclick=async()=>{try{const c=await getClient();const {error}=await c.auth.signOut();if(error)throw error;status('dp37-auth-status','Abgemeldet.','ok')}catch(e){status('dp37-auth-status',e.message,'error')}};
  const prior=document.querySelector('[data-tab="account"]');prior?.addEventListener('click',async()=>{try{const c=await getClient();const {data}=await c.auth.getUser();if(data?.user)status('dp37-auth-status','✓ Angemeldet: '+data.user.email,'ok')}catch{}});
- document.title='DailyPop 3.9.2 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent='DailyPop 3.9.2 · Privat auf deinem Gerät';
+ document.title='DailyPop 3.9.3 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent='DailyPop 3.9.3 · Privat auf deinem Gerät';
 })();
 
 // DailyPop 3.9: read-only Google Calendar connection for shift-aware suggested times.
@@ -660,6 +660,42 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
   const p=document.createElement('p');p.textContent=groupsLocal.map((g,i)=>g+': '+values[i]+' Uhr').join(' · ');box.append(p);
   const note=document.createElement('p');note.textContent='Dies sind Schicht-Vorschläge; deine normalen Zeiten werden nicht überschrieben.';box.append(note);
  }
+ // Alternative full-page OAuth token flow for browsers where GIS popups close after consent.
+ const redirectStateKey='dailypop_google_redirect_state_v393';
+ $('dp393-redirect').onclick=()=>{
+  try{
+   const client=getConfig();settings.client=client;persist();
+   if(!/^https:\/\//.test(location.href))throw Error('Bitte DailyPop über die HTTPS-GitHub-Seite öffnen.');
+   const state=Array.from(crypto.getRandomValues(new Uint8Array(24)),x=>x.toString(16).padStart(2,'0')).join('');
+   sessionStorage.setItem(redirectStateKey,state);
+   const url=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+   url.searchParams.set('client_id',client);
+   url.searchParams.set('redirect_uri',location.origin+location.pathname);
+   url.searchParams.set('response_type','token');
+   url.searchParams.set('scope','https://www.googleapis.com/auth/calendar.readonly');
+   url.searchParams.set('include_granted_scopes','true');
+   url.searchParams.set('state',state);
+   url.searchParams.set('prompt','consent');
+   location.assign(url.toString());
+  }catch(e){status('Alternative Anmeldung: '+e.message,true)}
+ };
+ async function handleRedirect(){
+  const hash=new URLSearchParams(location.hash.replace(/^#/,''));
+  const expected=sessionStorage.getItem(redirectStateKey);
+  if(!expected||!hash.has('state'))return;
+  if(hash.get('state')!==expected){status('Google-Anmeldung: Sicherheitsprüfung fehlgeschlagen. Bitte erneut versuchen.',true);return}
+  sessionStorage.removeItem(redirectStateKey);
+  // Remove the OAuth token from the browser address/history immediately.
+  history.replaceState(null,'',location.pathname+location.search);
+  if(hash.has('error')){status('Google-Anmeldung: '+(hash.get('error_description')||hash.get('error')),true);return}
+  const access=hash.get('access_token');
+  if(!access){status('Google hat keinen Zugriffstoken zurückgegeben. Bitte erneut versuchen.',true);return}
+  token=access;
+  status('✓ Google-Anmeldung bestätigt. Kalender werden geladen …');
+  try{await loadCalendars();status('✓ Google verbunden. Bitte „DailyPop Schichten“ auswählen und „Schichten aktualisieren“ klicken.');}
+  catch(e){status('Google verbunden, aber Kalender konnten nicht geladen werden: '+e.message,true)}
+ }
+ handleRedirect().catch(e=>status('Google-Rückmeldung: '+e.message,true));
  $('dp39-connect').onclick=()=>{try{connect()}catch(e){status(e.message,true)}};
  // Load the Google library ahead of time so the popup opens synchronously on a real click.
  loadGIS().catch(()=>{});

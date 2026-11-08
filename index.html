@@ -519,7 +519,7 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
  $('dp37-login').onclick=async()=>{const btn=$('dp37-login');btn.disabled=true;try{const c=await getClient();const email=$('dp37-email').value.trim(),password=$('dp37-password').value;if(!email||!password)throw Error('Bitte E-Mail und Passwort eingeben.');const {data,error}=await c.auth.signInWithPassword({email,password});if(error)throw error;status('dp37-auth-status','✓ Angemeldet: '+(data.user?.email||email),'ok');$('dp37-password').value=''}catch(e){status('dp37-auth-status','Anmeldung fehlgeschlagen: '+e.message,'error')}finally{btn.disabled=false}};
  $('dp37-logout').onclick=async()=>{try{const c=await getClient();const {error}=await c.auth.signOut();if(error)throw error;status('dp37-auth-status','Abgemeldet.','ok')}catch(e){status('dp37-auth-status',e.message,'error')}};
  const prior=document.querySelector('[data-tab="account"]');prior?.addEventListener('click',async()=>{try{const c=await getClient();const {data}=await c.auth.getUser();if(data?.user)status('dp37-auth-status','✓ Angemeldet: '+data.user.email,'ok')}catch{}});
- document.title='DailyPop 3.9.6 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent='DailyPop 3.9.6 · Privat auf deinem Gerät';
+ document.title='DailyPop 3.9.7 – Meine Supplements';const footer=document.querySelector('.foot');if(footer)footer.textContent='DailyPop 3.9.7 · Privat auf deinem Gerät';
 })();
 
 // DailyPop 3.9: read-only Google Calendar connection for shift-aware suggested times.
@@ -756,4 +756,50 @@ const dp36Footer=document.querySelector('.foot');if(dp36Footer)dp36Footer.textCo
  renderToday();
 })();
 
+</script><style>
+.dp397-card{background:#fff;border:1px solid #e9e0f1;border-radius:21px;padding:16px;margin:12px 0;box-shadow:0 5px 14px #38415b08}.dp397-card h3{margin:0 0 9px;font-size:18px}.dp397-card p{font-size:13px;color:#65728a;line-height:1.5}.dp397-line{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #f1edf4}.dp397-line strong{white-space:nowrap}.dp397-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.dp397-grid label{margin:8px 0 4px}.dp397-card input[type=checkbox]{width:auto;accent-color:#7158df}.dp397-card input[type=time]{width:100%}
+</style><script>
+// DailyPop 3.9.7: optional training planning. Existing supplement and Google settings untouched.
+(function(){
+ const $=id=>document.getElementById(id);
+ const key='dailypop_training_plan_v397',shiftKey='dailypop_google_shift_cache_v1';
+ const initial={Früh:'15:30',Spät:'09:00',Nacht:'15:30',Frei:'10:00'};
+ let config={};try{config=JSON.parse(localStorage.getItem(key))||{}}catch{}
+ config.starts={...initial,...(config.starts||{})};config.exceptions=config.exceptions||{};
+ const date=()=>new Date().toLocaleDateString('sv-SE');
+ const weekdays=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+ const planned=()=>[1,3,5].includes(new Date().getDay());
+ const readShift=()=>{try{return JSON.parse(localStorage.getItem(shiftKey))?.days?.[date()]||null}catch{return null}};
+ const persist=()=>localStorage.setItem(key,JSON.stringify(config));
+ const addMinutes=(hhmm,minutes)=>{const [h,m]=hhmm.split(':').map(Number);let n=(h*60+m+minutes+1440)%1440;return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0')};
+ const trainingToday=()=>config.exceptions[date()]===undefined?planned():config.exceptions[date()];
+ const plan=$('panel-plan'), anchor=$('dp395-today-summary');
+ const card=document.createElement('section');card.className='dp397-card';card.id='dp397-training';anchor.after(card);
+ const account=$('dp39-google');const settingsCard=document.createElement('section');settingsCard.className='dp397-card';settingsCard.innerHTML='<h3>🏋️ Trainingsplanung</h3><p>Montag, Mittwoch und Freitag sind grundsätzlich Trainingstage. Die Trainingsdauer beträgt ca. 2,5 Stunden. Startzeiten sind Vorschläge und können geändert werden.</p><div id="dp397-starts"></div><button type="button" class="productbtn" id="dp397-save">Trainingszeiten speichern</button><p id="dp397-message" class="smallnote" aria-live="polite"></p>';account.append(settingsCard);
+ const starts=$('dp397-starts');
+ for(const shift of ['Früh','Spät','Nacht','Frei']){
+  const line=document.createElement('div');line.className='dp397-grid';const label=document.createElement('label');label.textContent=shift==='Frei'?'Frei / FreiUnbezahlt':shift;const input=document.createElement('input');input.type='time';input.dataset.shift=shift;input.value=config.starts[shift];line.append(label,input);starts.append(line);
+ }
+ $('dp397-save').onclick=()=>{starts.querySelectorAll('input').forEach(input=>{config.starts[input.dataset.shift]=input.value||initial[input.dataset.shift]});persist();$('dp397-message').textContent='✓ Trainingszeiten gespeichert.';renderTraining()};
+ function renderTraining(){
+  const entry=readShift(),shift=entry?.kind||'Frei',kind=Object.hasOwn(initial,shift)?shift:'Frei';
+  const enabled=trainingToday(),start=config.starts[kind],end=addMinutes(start,150);
+  card.replaceChildren();
+  const heading=document.createElement('h3');heading.textContent='🏋️ Training heute';card.append(heading);
+  const p=document.createElement('p');p.textContent=weekdays[new Date().getDay()]+' · '+(planned()?'Regulärer Trainingstag (Mo/Mi/Fr)':'Regulär trainingsfrei')+' · '+(entry?'Schicht: '+entry.kind:'Schicht nicht bestätigt – freie Zeit als Vorschlag');card.append(p);
+  const label=document.createElement('label');label.style.cssText='display:flex;gap:10px;align-items:center;font-size:15px;margin:12px 0';
+  const check=document.createElement('input');check.type='checkbox';check.checked=enabled;
+  label.append(check,document.createTextNode('Heute trainieren'));card.append(label);
+  check.onchange=()=>{config.exceptions[date()]=check.checked;persist();renderTraining()};
+  if(enabled){
+   const line=document.createElement('div');line.className='dp397-line';const span=document.createElement('span');span.textContent='Vorgeschlagenes Training';const strong=document.createElement('strong');strong.textContent=start+'–'+end+' Uhr';line.append(span,strong);card.append(line);
+   const hint=document.createElement('p');hint.textContent='ESN Isoclear: optional rund um das Training, nach deinem Eiweißbedarf. Kein festes Einnahmefenster erforderlich.';card.append(hint);
+  }else{const hint=document.createElement('p');hint.textContent='Heute kein Training eingeplant. Kein versäumtes Training und keine Trainings-Erinnerung.';card.append(hint)}
+  const foot=document.createElement('p');foot.textContent='Die Uhrzeiten sind Vorschläge, keine festen Termine. Deine Supplements und bisherigen Häkchen bleiben unverändert.';card.append(foot);
+ }
+ document.querySelector('[data-tab="plan"]').addEventListener('click',renderTraining);
+ const googleStatus=$('dp39-today');if(googleStatus)new MutationObserver(renderTraining).observe(googleStatus,{childList:true,subtree:true,characterData:true});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)renderTraining()});
+ renderTraining();
+})();
 </script></body></html>
